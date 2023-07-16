@@ -1,4 +1,6 @@
 import streamlit as st
+import mne
+import matplotlib.pyplot as plt
 
 sidebar_name = "Preprocessing"
 
@@ -20,6 +22,39 @@ passe-bas de 24.49 Hz ont été appliqués. Ce sont des filtres utilisés de
 manière conventionnelle dans l’analyse de signal EEG et qui permet de
 conserver les signaux physiologiques tout en retirant des bruits parasites
 comme le 60Hz (courant du casque) par exemple."""
+
+rawo = mne.io.read_raw_fif("../data/S1_eeg.fif",preload=True)
+rawo30 = rawo.copy()
+rawo30.crop(tmax=30).load_data()
+
+def _update_slider(value):
+    st.session_state["filter_slider"] = value
+    display_fig()
+if "filter_slider" not in st.session_state:
+    st.session_state["filter_slider"] = 0
+ph, pb =0.01, 24.49
+min, max = 0.0, 100.0
+step = 1.0
+
+def display_fig():
+    pht,pbt=st.session_state["filter_slider"]
+    raw=rawo30.copy()
+    if st.session_state["check_butter"]:
+        raw.filter(pht,pbt,method='iir', iir_params = None)
+    else:
+        raw.filter(pht,pbt)
+    fig, ax = plt.subplots(figsize=(24, 12))
+    ax.plot(raw.times, raw.get_data(picks='FC1').squeeze())
+    return fig
+
+def display_ica():
+    rawica=rawo.copy()
+    if st.session_state["radio_ica"] == "Pas de filtre et d'ICA":
+        img_ica="../images/EEGAvantFiltrage.png"
+    else:
+        img_ica="../images/EEGApresFiltrage.png"
+    return img_ica
+
 subheader12 = "Filtre Butterworth"
 text12= """Pour les données fNIRS, nous avons utilisé un filtre passe-bande
 particulier, un filtre Butterworth d'ordre 4. Le gain de ce filtre est le
@@ -43,7 +78,12 @@ pour les transformer en signaux de concentration d’hémoglobine oxygénée (Hb
 et d’hémoglobine désoxygénée (HbR). Cette transformation a été réalisée
 en appliquant la loi de Beer-Lambert.
 """
-
+hbo_righthand_FC1_1="../images/NIRS_hbo_righthand_FC1_1.png"
+hbo_righthand_FC1_2="../images/NIRS_hbo_righthand_FC1_2.png"
+hbo_righthand_FC1_3="../images/NIRS_hbo_righthand_FC1_3.png"
+hbr_righthand_FC1_1="../images/NIRS_hbr_righthand_FC1_1.png"
+hbr_righthand_FC1_2="../images/NIRS_hbr_righthand_FC1_2.png"
+hbr_righthand_FC1_3="../images/NIRS_hbr_righthand_FC1_3.png"
 
 def run():
 
@@ -57,14 +97,46 @@ def run():
     st.header(header1)
     st.subheader(subheader11)
     st.write(text11)
+    col1, col2 = st.columns([4, 1])
+    with col1:
+        filtre=st.slider("Filtre",min,max,value=(ph,pb),step=step,key="filter_slider",on_change=display_fig)
+    with col2:
+        st.button("Defaut : 0,01 à 24,49", on_click=_update_slider, kwargs={"value": (ph,pb)})
+        st.checkbox("Butterworth Ordre 4", on_change=display_fig, key="check_butter")
+    st.pyplot(display_fig())
+
     st.subheader(subheader12)
     st.write(text12)
-
+    
     st.header(header2)
     st.write(text2)
-
+    col1, col2 = st.columns([1, 3])
+    with col1:
+        scenario = st.radio("Scenario:",("Pas de filtre et d'ICA","Avec filtre et ICA 4 composants principaux"),key="radio_ica",on_change=display_ica)
+    with col2:
+        st.image(display_ica())
+    
     st.header(header3)
     st.write(text3)
-
-#    st.selectbox("Les différentes méthode de preprocessing",
-#                ("ICA", "hbr","Butter"))
+    st.write("1) Signaux originaux **sans transformation** pour les longueurs d’ondes 760 et 850 nm")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.image(hbo_righthand_FC1_1)
+    with col2:
+        st.image(hbr_righthand_FC1_1)
+    st.write("""2) Signaux **après transformation en concentration HbO et HbR**.
+    Les coefficients d'absorptivité molaire (correspondant à la mesure de la force avec laquelle une espèce chimique absorbe, et donc atténue, la lumière à une longueur d'onde donnée) utilisé pour appliquer la loi de Beer-Lambert pour nos longueurs d’onde sont les suivants : 
+    760 :  3.56 pour HbR et 1,34 pour HbO
+    850 :  1,59 pour HbR et 2,44 pour HbO
+    """)
+    col1, col2 = st.columns(2)
+    with col1:
+        st.image(hbo_righthand_FC1_2)
+    with col2:
+        st.image(hbr_righthand_FC1_2)
+    st.write("3) Signaux après utilisation d’un **filtre passe-bande Butterworth de 4ème ordre**, entre 0.01 et 0.2 Hz pour éliminer les artefacts.")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.image(hbo_righthand_FC1_3)
+    with col2:
+        st.image(hbr_righthand_FC1_3)
